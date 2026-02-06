@@ -10,11 +10,12 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-const DB_FILE = './database.json';
+// Cloud එකේදී database එක ගබඩා වන ස්ථානය
+const DB_FILE = path.join(__dirname, 'database.json');
 
 app.use(express.json()); 
 
-// ngrok skip warning
+// ngrok skip warning (Cloud එකට ගිය පසු මෙය අවශ්‍ය නොවුණත් තිබීම ගැටලුවක් නොවේ)
 app.use((req, res, next) => {
     res.setHeader('ngrok-skip-browser-warning', 'true');
     next();
@@ -52,7 +53,7 @@ function getSLDateTime() {
     return new Date().toLocaleString('en-GB', { timeZone: 'Asia/Colombo' });
 }
 
-// Log එකතු කිරීම (Activity Logs සඳහා)
+// Log එකතු කිරීම
 function addLog(msg) {
     let db = readDB();
     if(!db.history) db.history = [];
@@ -105,14 +106,11 @@ io.on('connection', (socket) => {
     console.log('Client Connected: ' + socket.id);
     socket.emit('sync', readDB());
 
-    // 1. ON/OFF පාලනය සහ History එකතු කිරීම (Report එක සඳහා)
     socket.on('control', (data) => {
         let db = readDB();
         let dev = db.devices.find(d => d.id === data.id);
         if (dev) {
             dev.power = data.cmd;
-            
-            // රිපෝට් එක සඳහා වඩාත් පැහැදිලි History එකක් එකතු කිරීම
             const historyEntry = {
                 time: getSLDateTime(),
                 name: dev.name,
@@ -122,17 +120,14 @@ io.on('connection', (socket) => {
                 event: `${dev.name} (${dev.classNo}) turned ${data.cmd}`,
                 type: "control"
             };
-
             if(!db.history) db.history = [];
             db.history.unshift(historyEntry);
-            
             saveDB(db);
             io.emit('control', { id: data.id, cmd: data.cmd }); 
             io.emit('sync', db);
         }
     });
 
-    // 2. Settings සංස්කරණය
     socket.on('saveEdit', (data) => {
         let db = readDB();
         let dev = db.devices.find(d => d.id === data.id);
@@ -142,14 +137,12 @@ io.on('connection', (socket) => {
             dev.classNo = data.classNo || dev.classNo;
             dev.dept = data.dept || dev.dept;
             dev.hours = parseInt(data.hours) || 0;
-            
             saveDB(db);
             addLog(`Settings updated for ${dev.name} (${dev.classNo})`);
             io.emit('sync', db);
         }
     });
 
-    // 3. අලුතින් Device එකක් UI එකෙන් එකතු කිරීම (Arduino නැතිව Test කිරීමට)
     socket.on('addDevice', (data) => {
         let db = readDB();
         const newDev = {
@@ -195,10 +188,9 @@ io.on('connection', (socket) => {
         db.users.push(data);
         saveDB(db);
         addLog(`New user added: ${data.id}`);
-        io.emit('sync', db); // User list එකත් sync කරන්න
+        io.emit('sync', db);
     });
 
-    // 4. Logs Clear කිරීමේ පහසුකම
     socket.on('clearLogs', () => {
         let db = readDB();
         db.history = [];
@@ -212,11 +204,11 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = 3000;
+// Cloud Hosting සඳහා Port එක සහ Host Address සැකසීම
+const PORT = process.env.PORT || 8000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n==================================================`);
-    console.log(`🚀 SMARTBOARD SERVER v2.6 - READY`);
-    console.log(`📊 History Logging: Advanced (Report Optimized)`);
-    console.log(`🔗 URL: http://localhost:${PORT}`);
+    console.log(`🚀 SMARTBOARD SERVER v2.6 - CLOUD READY`);
+    console.log(`📊 Port: ${PORT} | Mode: 24/7 Always-On`);
     console.log(`==================================================\n`);
 });
